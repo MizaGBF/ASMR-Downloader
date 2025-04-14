@@ -18,5 +18,13 @@ Simply start the script.
 python asmr_downloader.py
 ```  
   
-Input the code of whatever work you want to download.  
+Option `0` lets you input the code of whatever work you want to download.  
 You'll be prompted to select what files you wish to download or not.  
+  
+Option `1` lets you generate a basic (for now) HTML file of all works found in the given folder.  
+It can take time if you have a lot of them.  
+  
+Option `2` lets you switch to another endpoint.  
+  
+Option `3` will close the script.  
+  

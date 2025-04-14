@@ -3,7 +3,7 @@ import asyncio
 import aiohttp
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 import json
 
 class ASMR_DL():
@@ -11,6 +11,7 @@ class ASMR_DL():
     def __init__(self : ASMR_DL) -> None:
         self.http : aiohttp.ClientSession = None
         self.ENDPOINTS : dict[str, str] = None
+        self.cur_endp : int = 0
 
     async def init_endpoint(self : ASMR_DL) -> None:
         html : list[str] = (await self.get_str(self.BASE_ENDPOINT)).split("<script ")
@@ -48,8 +49,8 @@ class ASMR_DL():
             else:
                 raise Exception("HTTP Error {}".format(response.status))
 
-    def get_first_endpoint(self : ASMR_DL) -> str:
-        return list(self.ENDPOINTS.values())[0]
+    def get_endpoint(self : ASMR_DL) -> str:
+        return list(self.ENDPOINTS.values())[self.cur_endp]
 
     def convert_track(self : ASMR_DL, track : dict|list, path : str = "") -> None:
         output : list[dict] = []
@@ -144,7 +145,7 @@ class ASMR_DL():
         return True
 
     async def open_management(self : ASMR_DL, code : str, data : dict) -> None:
-        tracks : dict = await self.get_json(self.get_first_endpoint() + "api/tracks/" + code + "?v=1")
+        tracks : dict = await self.get_json(self.get_endpoint() + "api/tracks/" + code + "?v=1")
         content : list[dict] = self.convert_track(tracks)
         print("Title:", data["title"])
         print("Work ID:", data["id"])
@@ -178,24 +179,221 @@ class ASMR_DL():
                 if await self.download(code, content):
                     break
 
+    def get_code_from_name(self : ASMR_DL, name : str) -> str|None:
+        names : list[str] = name.lower().split(".", 1)[0].split(" ")
+        for n in names:
+            if (n.startswith("re") or n.startswith("rj")) and len(n) >= 8 and n[2:].isdigit():
+                return n[2:]
+            elif len(n) >= 8 and n.isdigit():
+                return n
+        return None
+
+    def iterdir(self : ASMR_DL, directory : Path) -> dict:
+        table = {}
+        for p in directory.iterdir():
+            if p.is_file():
+                if p.suffix in (".zip", ".rar", ".7z", ".tar", ".gz", ".gar"):
+                    code : str|None = self.get_code_from_name(p.name)
+                    if code is not None:
+                        table[code] = {"path":p.as_posix()}
+            elif p.is_dir():
+                code : str|None = self.get_code_from_name(p.name)
+                if code is None:
+                    table = table | self.iterdir(p)
+                else:
+                    table[code] = {"path":p.as_posix()}
+        return table
+
+    def generate_indexhtml(self : ASMR_DL, path : Path, table : dict) -> None:
+        html : list[str] = ["""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sortable and Searchable Table</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    #searchContainer {
+      text-align: center;
+      margin: 20px;
+    }
+    #searchBar {
+      width: 80%;
+      padding: 8px;
+      font-size: 16px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 80%;
+      margin: 20px auto;
+    }
+    th, td {
+      padding: 8px 16px;
+      border: 1px solid #ccc;
+    }
+    th {
+      cursor: pointer;
+      background-color: #f4f4f4;
+    }
+  </style>
+</head>
+<body>
+  <div id="searchContainer">
+    <input id="searchBar" type="text" placeholder="Search..." />
+  </div>
+  <table id="dataTable">
+    <thead>
+      <tr>
+        <!-- data-type attribute to indicate sorting type -->
+        <th data-type="number">ID</th>
+        <th data-type="number">Path</th>
+        <th data-type="string">Title</th>
+        <th data-type="string">Circle</th>
+        <th data-type="string">Tags</th>
+      </tr>
+    </thead>
+    <tbody>
+"""]
+
+        for wid, data in table.items():
+            html.append("""      <tr>
+        <td>{}</td>
+        <td>{}</td>
+        <td>{}</td>
+        <td>{}</td>
+        <td>{}</td>
+      </tr>
+""".format(wid, data["path"], data.get("title", "NO TITLE"), data.get("name", ""), ", ".join(data.get("tags", []))))
+
+        html.append("""    </tbody>
+  </table>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const table = document.getElementById('dataTable');
+      const headers = table.querySelectorAll('th');
+      const searchBar = document.getElementById('searchBar');
+      // Maintain sort order for each column: default is ascending
+      let sortOrders = Array(headers.length).fill('asc');
+
+      // Function to perform sorting by column index and type (number/string)
+      const sortColumn = (index, type) => {
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        rows.sort((rowA, rowB) => {
+          let cellA = rowA.children[index].textContent.trim();
+          let cellB = rowB.children[index].textContent.trim();
+
+          if (type === 'number') {
+            cellA = parseFloat(cellA);
+            cellB = parseFloat(cellB);
+          }
+
+          if (cellA < cellB) return sortOrders[index] === 'asc' ? -1 : 1;
+          if (cellA > cellB) return sortOrders[index] === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        // Toggle sort order for subsequent clicks
+        sortOrders[index] = sortOrders[index] === 'asc' ? 'desc' : 'asc';
+
+        // Reinsert sorted rows into the tbody
+        while (tbody.firstChild) {
+          tbody.removeChild(tbody.firstChild);
+        }
+        rows.forEach(row => tbody.appendChild(row));
+      };
+
+      // Attach click listeners to each header for sorting
+      headers.forEach((header, index) => {
+        header.addEventListener('click', () => {
+          const type = header.getAttribute('data-type');
+          sortColumn(index, type);
+        });
+      });
+
+      // Search functionality: filter rows based on search input
+      searchBar.addEventListener('input', () => {
+        const filter = searchBar.value.trim().toLowerCase();
+        const tbody = table.querySelector('tbody');
+        const rows = tbody.querySelectorAll('tr');
+
+        rows.forEach(row => {
+          // Check if any cell in the row contains the filter string
+          const cells = Array.from(row.children);
+          const isMatch = cells.some(cell => cell.textContent.toLowerCase().includes(filter));
+          row.style.display = filter === '' || isMatch ? '' : 'none';
+        });
+      });
+    });
+  </script>
+</body>
+</html>""")
+        with open(path / "index.html", mode="w", encoding="utf-8") as f:
+            f.write("".join(html))
+        print(path / "index.html", "has been generated")
+
     async def run(self : ASMR_DL) -> None:
         async with aiohttp.ClientSession() as self.http:
             await self.init_endpoint()
             if len(self.ENDPOINTS) == 0:
                 raise Exception("No endpoints")
             else:
-                print(len(self.ENDPOINTS), "endpoint(s)")
+                print(len(self.ENDPOINTS), "endpoint(s) loaded")
                 for e, u in self.ENDPOINTS.items():
                     print(e, "-", u)
-            print("ASMR Downloader v1.0")
+            print("ASMR Downloader v1.1")
             while True:
-                code : str = input("Input a work code (Blank to quit):").strip()
-                if code == "":
-                    break
-                elif code.startswith("RJ"):
-                    code = code[2:]
-                data : dict = await self.get_json(self.get_first_endpoint() + "api/workInfo/" + code)
-                await self.open_management(code, data)
+                print("")
+                print("[0] Download a work")
+                print("[1] Generate index.html")
+                print("[2] Change endpoint (Current: " + self.get_endpoint() + ")")
+                print("[3] Quit")
+                match input():
+                    case "0":
+                        code : str = input("Input a work code (Blank to cancel):").strip()
+                        if code == "":
+                            continue
+                        elif code.startswith("RJ"):
+                            code = code[2:]
+                        try:
+                            data : dict = await self.get_json(self.get_endpoint() + "api/workInfo/" + code)
+                            await self.open_management(code, data)
+                        except:
+                            print("Work", code, "possibly not found")
+                    case "1":
+                        try:
+                            base_path : Path = Path(input("Input the root folder path (Leave blank to use the current directory):"))
+                        except Exception as e:
+                            print("Exception:", e)
+                            print("Aborted...")
+                            continue
+                        table : dict = self.iterdir(base_path)
+                        TEST = 0
+                        for k in table:
+                            try:
+                                infos : dict = await self.get_json(self.get_endpoint() + "api/workInfo/" + k + "?v=1")
+                            except Exception as e:
+                                print(k, "not found")
+                                continue
+                            table[k]["title"] = infos["title"]
+                            table[k]["name"] = infos["name"]
+                            table[k]["tags"] = []
+                            for t in infos["tags"]:
+                                if "i18n" in t and "en-us" in t["i18n"] and t["i18n"]["en-us"].get("name", None) is not None:
+                                    table[k]["tags"].append(t["i18n"]["en-us"]["name"])
+                                elif t.get("name", None) is not None:
+                                    table[k]["tags"].append(t["name"])
+                            print("Added", k)
+                        self.generate_indexhtml(base_path, table)
+                    case "2":
+                        self.cur_endp = (self.cur_endp + 1) % len(self.ENDPOINTS)
+                    case "3":
+                        break
+                    case _:
+                        pass
 
 if __name__ == "__main__":
     asyncio.run(ASMR_DL().run())
