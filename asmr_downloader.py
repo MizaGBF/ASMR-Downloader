@@ -3,7 +3,7 @@ import asyncio
 import aiohttp
 import os
 import sys
-from pathlib import Path, PurePath
+from pathlib import Path
 import json
 
 class ASMR_DL():
@@ -371,11 +371,10 @@ class ASMR_DL():
                             print("Aborted...")
                             continue
                         table : dict = self.iterdir(base_path)
-                        TEST = 0
                         for k in table:
                             try:
                                 infos : dict = await self.get_json(self.get_endpoint() + "api/workInfo/" + k + "?v=1")
-                            except Exception as e:
+                            except:
                                 print(k, "not found")
                                 continue
                             table[k]["title"] = infos["title"]
