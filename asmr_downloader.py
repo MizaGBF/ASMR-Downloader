@@ -247,6 +247,7 @@ class ASMR_DL():
       <tr>
         <!-- data-type attribute to indicate sorting type -->
         <th data-type="number">ID</th>
+        <th data-type="number">Cover</th>
         <th data-type="number">Path</th>
         <th data-type="string">Title</th>
         <th data-type="string">Circle</th>
@@ -263,8 +264,9 @@ class ASMR_DL():
         <td>{}</td>
         <td>{}</td>
         <td>{}</td>
+        <td>{}</td>
       </tr>
-""".format(wid, data["path"], data.get("title", "NO TITLE"), data.get("name", ""), ", ".join(data.get("tags", []))))
+""".format(data.get("thumb_tag", ""), wid, data["path"], data.get("title", "NO TITLE"), data.get("name", ""), ", ".join(data.get("tags", []))))
 
         html.append("""    </tbody>
   </table>
@@ -344,7 +346,7 @@ class ASMR_DL():
                 print(len(self.ENDPOINTS), "endpoint(s) loaded")
                 for e, u in self.ENDPOINTS.items():
                     print(e, "-", u)
-            print("ASMR Downloader v1.1")
+            print("ASMR Downloader v1.2")
             while True:
                 print("")
                 print("[0] Download a work")
@@ -380,6 +382,7 @@ class ASMR_DL():
                             table[k]["title"] = infos["title"]
                             table[k]["name"] = infos["name"]
                             table[k]["tags"] = []
+                            table[k]["thumb_tag"] = f'<img src="{infos["thumbnailCoverUrl"]}" style="max-height:120px">'
                             for t in infos["tags"]:
                                 if "i18n" in t and "en-us" in t["i18n"] and t["i18n"]["en-us"].get("name", None) is not None:
                                     table[k]["tags"].append(t["i18n"]["en-us"]["name"])
