@@ -27,21 +27,21 @@ class ASMR_DL():
                 break
 
     async def get_str(self : ASMR_DL, url : str) -> str:
-        async with self.http.get(url) as response:
+        async with self.http.get(url, headers={"accept-language":"zh-CN"}) as response:
             if response.status == 200:
                 return (await response.read()).decode('utf-8')
             else:
                 raise Exception("HTTP Error {}".format(response.status))
 
     async def get_json(self : ASMR_DL, url : str) -> str:
-        async with self.http.get(url) as response:
+        async with self.http.get(url, headers={"accept-language":"zh-CN"}) as response:
             if response.status == 200:
                 return await response.json()
             else:
                 raise Exception("HTTP Error {}".format(response.status))
 
     async def download_file(self : ASMR_DL, src_url : str, dst_file : Path) -> None:
-        async with self.http.get(src_url) as response:
+        async with self.http.get(src_url, headers={"accept-language":"zh-CN"}) as response:
             if response.status == 200:
                 with open(dst_file.as_posix(), mode="wb") as f:
                     async for data in response.content.iter_chunked(10485760):
@@ -346,7 +346,7 @@ class ASMR_DL():
                 print(len(self.ENDPOINTS), "endpoint(s) loaded")
                 for e, u in self.ENDPOINTS.items():
                     print(e, "-", u)
-            print("ASMR Downloader v1.2")
+            print("ASMR Downloader v1.3")
             while True:
                 print("")
                 print("[0] Download a work")
